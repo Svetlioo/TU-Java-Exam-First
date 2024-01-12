@@ -19,25 +19,22 @@ import java.util.Objects;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 
-public class Server
-{
+public class Server {
     private static final String USERS_FILENAME = "users.bin";
 
     private final Object usersLock;
 
     private ServerSocket server;
 
-    public Server()
-    {
+    public Server() {
         initAdmins();
         usersLock = new Object();
     }
 
     /*
-    Creates the users file the first time the server is ran.
+    Creates the users file the first time the server is run.
      */
-    public void initAdmins()
-    {
+    public void initAdmins() {
         if (new File(USERS_FILENAME).exists())
             return;
         List<User> users = new ArrayList<>();
@@ -45,47 +42,27 @@ public class Server
         saveUsers(users);
     }
 
-    public void start()
-    {
-        try
-        {
+    public void start() {
+        try {
             System.out.println("Server listening.");
             server = new ServerSocket(8080);
 
-            while (true)
-            {
+            while (true) {
                 Socket client = server.accept();
 
                 Thread clientThread = new Thread(() ->
                 {
                     System.out.println("Accepted client.");
-                    Scanner sc = null;
-                    PrintStream out = null;
-
-                    try
-                    {
-                        sc = new Scanner(client.getInputStream());
-                        out = new PrintStream(client.getOutputStream());
+                    try (Scanner sc = new Scanner(client.getInputStream()); PrintStream out = new PrintStream(client.getOutputStream())) {
                         userMenu(sc, out);
-                    }
-                    catch (IOException e)
-                    {
+                    } catch (IOException e) {
                         e.printStackTrace();
-                    }
-                    finally
-                    {
-                        if (sc != null)
-                            sc.close();
-                        if (out != null)
-                            out.close();
                     }
                 });
 
                 clientThread.start();
             }
-        }
-        catch (IOException e)
-        {
+        } catch (IOException e) {
             e.printStackTrace();
         }
 
@@ -94,25 +71,18 @@ public class Server
     }
 
     @SuppressWarnings("unchecked")
-    public List<User> loadUsers()
-    {
-        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(USERS_FILENAME)))
-        {
+    public List<User> loadUsers() {
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(USERS_FILENAME))) {
             return (List<User>) in.readObject();
-        }
-        catch (IOException e)
-        {
-            if (e instanceof InvalidClassException)
-            {
+        } catch (IOException e) {
+            if (e instanceof InvalidClassException) {
                 throw new RuntimeException("One or more of the roles.User subclasses has likely changed." +
                         " Serializable versions are not supported." +
                         " Recreate the users file.", e);
             }
 
             e.printStackTrace();
-        }
-        catch (ClassNotFoundException e)
-        {
+        } catch (ClassNotFoundException e) {
             // Should never happen
             throw new RuntimeException(e);
         }
@@ -120,35 +90,26 @@ public class Server
         return null;
     }
 
-    public void saveUsers(List<User> users)
-    {
-        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(USERS_FILENAME)))
-        {
+    public void saveUsers(List<User> users) {
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(USERS_FILENAME))) {
             out.writeObject(users);
-        }
-        catch (IOException e)
-        {
+        } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    private void registerUser(String userName, String password, UserType userType) throws CredentialsException
-    {
-        User user  = UserFactory.createUser(userName, password, userType);
-        synchronized (usersLock)
-        {
+    private void registerUser(String userName, String password, UserType userType) throws CredentialsException {
+        User user = UserFactory.createUser(userName, password, userType);
+        synchronized (usersLock) {
             List<User> users = loadUsers();
             users.add(user);
             saveUsers(users);
         }
     }
 
-    private User login(String userName, String password)
-    {
-        synchronized (usersLock)
-        {
-            for (User user : loadUsers())
-            {
+    private User login(String userName, String password) {
+        synchronized (usersLock) {
+            for (User user : loadUsers()) {
                 if (Objects.equals(user.getUserName(), userName) && Objects.equals(user.getPassword(), password))
                     return user;
             }
@@ -157,15 +118,12 @@ public class Server
         }
     }
 
-    private void userMenu(Scanner sc, PrintStream out)
-    {
-        while (true)
-        {
+    private void userMenu(Scanner sc, PrintStream out) {
+        while (true) {
             out.println("Login? Y/N");
             String login = sc.nextLine();
 
-            if (!login.equalsIgnoreCase("Y"))
-            {
+            if (!login.equalsIgnoreCase("Y")) {
                 out.println("Goodbye.");
                 return;
             }
@@ -178,26 +136,21 @@ public class Server
 
             User user = login(userName, password);
 
-            if (user == null)
-            {
+            if (user == null) {
                 out.println("Error: Invalid login.");
                 continue;
             }
 
-            switch (user.getUserType())
-            {
-                case ADMIN:
-                {
+            switch (user.getUserType()) {
+                case ADMIN: {
                     adminMenu(sc, out, (Admin) user);
                     break;
                 }
-                case STUDENT:
-                {
+                case STUDENT: {
                     studentMenu(sc, out, (Student) user);
                     break;
                 }
-                case TEACHER:
-                {
+                case TEACHER: {
                     teacherMenu(sc, out, (Teacher) user);
                     break;
                 }
@@ -205,13 +158,11 @@ public class Server
         }
     }
 
-    private void adminMenu(Scanner sc, PrintStream out, Admin admin)
-    {
+    private void adminMenu(Scanner sc, PrintStream out, Admin admin) {
         out.println("Logged in as admin.");
 
-        out.println("Enter user type to create: (ADMIN | STUDENT | TEACHER");
-        try
-        {
+        out.println("Enter user type to create: (ADMIN | STUDENT | TEACHER)");
+        try {
             UserType userType = UserType.valueOf(sc.nextLine().toUpperCase());
 
             out.println("Enter username:");
@@ -223,19 +174,14 @@ public class Server
             registerUser(userName, password, userType);
 
             out.println("Success.");
-        }
-        catch (IllegalArgumentException e)
-        {
+        } catch (IllegalArgumentException e) {
             out.println("Error: Invalid user type.");
-        }
-        catch (CredentialsException e)
-        {
+        } catch (CredentialsException e) {
             out.println(e.getMessage());
         }
     }
 
-    private void studentMenu(Scanner sc, PrintStream out, Student student)
-    {
+    private void studentMenu(Scanner sc, PrintStream out, Student student) {
         out.println("Logged in as student.");
         List<Grade> sortedGrades = student.getGrades()
                 .stream()
@@ -244,8 +190,7 @@ public class Server
         out.println(sortedGrades);
     }
 
-    private void teacherMenu(Scanner sc, PrintStream out, Teacher teacher)
-    {
+    private void teacherMenu(Scanner sc, PrintStream out, Teacher teacher) {
         out.println("Logged in as teacher.");
 
         out.println("Enter student faculty number:");
@@ -262,13 +207,10 @@ public class Server
 
         Grade grade = new Grade(subject, semester, gradeValue);
 
-        synchronized (usersLock)
-        {
+        synchronized (usersLock) {
             List<User> users = loadUsers();
-            for (User user : users)
-            {
-                if (user.getUserName().equals(facultyNumber) && user instanceof Student)
-                {
+            for (User user : users) {
+                if (user.getUserName().equals(facultyNumber) && user instanceof Student) {
                     Student student = (Student) user;
 
                     student.getGrades().add(grade);
